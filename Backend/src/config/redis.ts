@@ -1,9 +1,11 @@
+// redis.ts
+
 import { createClient } from 'redis';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const redisHost = process.env.REDIS_HOST || 'localhost';
+const redisHost = process.env.REDIS_HOST || '127.0.0.1';
 const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
 const redisPassword = process.env.REDIS_PASSWORD || undefined;
 

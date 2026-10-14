@@ -1,3 +1,5 @@
+// index.ts
+
 import { pool } from './config/db.js';
 import { redisClient, connectRedis } from './config/redis.js';
 

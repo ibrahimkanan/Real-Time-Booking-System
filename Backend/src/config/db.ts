@@ -1,3 +1,5 @@
+// db.ts
+
 import pkg from 'pg';
 import dotenv from 'dotenv';
 
@@ -6,11 +8,11 @@ dotenv.config();
 const { Pool } = pkg;
 
 export const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  user: process.env.DB_USER || 'admin',
-  password: process.env.DB_PASSWORD || 'secretpassword',
-  database: process.env.DB_NAME || 'booking_system',
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: parseInt(process.env.DB_PORT || '5433', 10),
+  database: process.env.DB_NAME || 'booking_db',
+  user: process.env.DB_USER || 'booking_user',
+  password: process.env.DB_PASSWORD || 'booking_pass123',
   max: 20, // Max concurrent connections in pool
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

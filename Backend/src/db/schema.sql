@@ -1,3 +1,5 @@
+-- schema.sql
+
 -- 1. Events Table
 CREATE TABLE IF NOT EXISTS "Events" (
     id SERIAL PRIMARY KEY,

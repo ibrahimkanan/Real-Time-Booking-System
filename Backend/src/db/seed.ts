@@ -1,3 +1,5 @@
+// seed.ts
+
 import { fileURLToPath } from 'url';
 import { pool, closeDb } from '../config/db.js';
 import { initializeDatabase } from './init.js';
