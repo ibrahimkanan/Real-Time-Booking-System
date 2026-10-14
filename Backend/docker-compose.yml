@@ -1,21 +1,19 @@
 version: '3.8'
 
 services:
-  # PostgreSQL
   postgres:
     image: postgres:15-alpine
-    container_name: booking_postgres
+    container_name: booking_postgres_v2
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
-      POSTGRES_DB: booking_system
+      POSTGRES_USER: booking_user
+      POSTGRES_PASSWORD: booking_pass123
+      POSTGRES_DB: booking_db
     ports:
-      - "5433:5432"
+      - "5444:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_v2:/var/lib/postgresql/data
 
-  # Redis
   redis:
     image: redis:7-alpine
     container_name: booking_redis
@@ -26,5 +24,5 @@ services:
       - redisdata:/data
 
 volumes:
-  pgdata:
+  pgdata_v2:
   redisdata:
