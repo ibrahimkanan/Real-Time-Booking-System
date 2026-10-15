@@ -25,7 +25,7 @@ export const holdSeat = async (req: Request, res: Response) => {
             await client.query("BEGIN");
 
             const seatResult = await client.query(
-                `SELECT status FORM "Seats" WHERE id = $1 AND event_id = $2 FOR UPDATE`,
+                `SELECT status FROM "Seats" WHERE id = $1 AND event_id = $2 FOR UPDATE`,
                 [seatId, eventId],
             );
 
