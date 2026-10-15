@@ -2,6 +2,14 @@
 
 import { pool } from './config/db.js';
 import { redisClient, connectRedis } from './config/redis.js';
+import seatRoutes from './routes/seat.route.js';
+import express from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.use('/api/seats', seatRoutes);
+
 
 async function main() {
   console.log('--- Initializing Real-Time Booking Backend ---');
