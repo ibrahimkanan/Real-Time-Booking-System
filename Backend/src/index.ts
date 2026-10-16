@@ -3,6 +3,7 @@ import { pool } from "./config/db.js";
 import { redisClient, connectRedis } from "./config/redis.js";
 
 import seatRoutes from "./routes/seat.route.js";
+import { startSeatBookingWorker } from "./workers/seat.worker.js";
 
 const app = express();
 const PORT = 3000;
@@ -27,7 +28,10 @@ async function main() {
         const redisVal = await redisClient.get("health");
         console.log("[Redis] Health check key value:", redisVal);
 
-        // 3. Express Server
+        // 3. start background worker
+        startSeatBookingWorker();
+
+        // 4. Express Server
         app.listen(PORT, () => {
             console.log(
                 `[Server] Express is running on http://localhost:${PORT}`,
