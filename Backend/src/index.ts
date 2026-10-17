@@ -4,6 +4,7 @@ import { redisClient, connectRedis } from "./config/redis.js";
 
 import seatRoutes from "./routes/seat.route.js";
 import { startSeatBookingWorker } from "./workers/seat.worker.js";
+import paymentRoutes from "./routes/payment.route.js";
 
 const app = express();
 const PORT = 3000;
@@ -11,6 +12,7 @@ const PORT = 3000;
 app.use(express.json());
 
 app.use("/api/seats", seatRoutes);
+app.use("/api/payments", paymentRoutes);
 
 async function main() {
     console.log("--- Initializing Real-Time Booking Backend ---");
