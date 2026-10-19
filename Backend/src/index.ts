@@ -9,7 +9,14 @@ import paymentRoutes from "./routes/payment.route.js";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+// stripe webhook needs raw body
+app.use((req, res, next) => {
+    if (req.originalUrl === "/api/payments/webhook") {
+        next();
+    } else {
+        express.json()(req, res, next);
+    }
+});
 
 app.use("/api/seats", seatRoutes);
 app.use("/api/payments", paymentRoutes);
