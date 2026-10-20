@@ -7,13 +7,68 @@ import { pool } from "../config/db.js";
 import { v4 as uuidv4 } from "uuid";
 import Stripe from "stripe";
 
+// Helper function to finalize booking in PostgreSQL and clean up Redis
+const finalizeBookingInDB = async (
+    eventId: number,
+    seatId: number,
+    userId: string,
+) => {
+    const holdKey = `hold:event:${eventId}:seat:${seatId}`;
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        // Lock the seat row in PostgreSQL
+        const seatResult = await client.query(
+            `SELECT status FROM "Seats" WHERE id = $1 AND event_id = $2 FOR UPDATE`,
+            [seatId, eventId],
+        );
+
+        if (
+            seatResult.rows.length === 0 ||
+            seatResult.rows[0].status === "booked"
+        ) {
+            await client.query("ROLLBACK");
+            return {
+                success: false,
+                reason: "Seat is already booked or does not exist",
+            };
+        }
+
+        // Update seat status to booked
+        await client.query(
+            `UPDATE "Seats" SET status = 'booked', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [seatId],
+        );
+
+        // Create official booking record
+        const bookingReference = uuidv4();
+        await client.query(
+            `INSERT INTO "Bookings" (event_id, seat_id, user_id, booking_reference, status)
+            VALUES ($1, $2, $3, $4, 'confirmed')`,
+            [eventId, seatId, userId, bookingReference],
+        );
+
+        // Remove temporary hold from Redis
+        await redisClient.del(holdKey);
+
+        await client.query("COMMIT");
+        return { success: true, bookingReference };
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
 export const createCheckoutSession = async (
     req: Request,
     res: Response,
 ): Promise<void> => {
     const { eventId, seatId, userId } = req.body;
 
-    // validate input
     if (!eventId || !seatId || !userId) {
         res.status(400).json({ error: "Missing eventId, seatId, or userId" });
         return;
@@ -22,14 +77,41 @@ export const createCheckoutSession = async (
     const holdKey = `hold:event:${eventId}:seat:${seatId}`;
 
     try {
-        // check if seat is held by this user
+        // 1. Verify that the user still holds the seat in Redis
         const heldBy = await redisClient.get(holdKey);
 
         if (heldBy !== userId) {
-            res.status(400).json({ error: "Seat is not held by this user" });
+            res.status(403).json({
+                error: "Seat hold has expired or is held by someone else",
+            });
             return;
         }
 
+        // 2. Check if Mock Mode is enabled for load testing (k6)
+        if (process.env.PAYMENT_MODE === "mock") {
+            // Simulate 200ms network latency for realistic load testing
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            const result = await finalizeBookingInDB(
+                Number(eventId),
+                Number(seatId),
+                userId,
+            );
+
+            if (!result.success) {
+                res.status(409).json({ error: result.reason });
+                return;
+            }
+
+            res.status(200).json({
+                message: "Mock payment processed and seat booked successfully",
+                mode: "mock",
+                bookingReference: result.bookingReference,
+            });
+            return;
+        }
+
+        // 3. Real Stripe Checkout Session (when PAYMENT_MODE !== 'mock')
         const session = await stripe.checkout.sessions.create({
             line_items: [
                 {
@@ -39,7 +121,7 @@ export const createCheckoutSession = async (
                             name: `Ticket for Event ${eventId} - Seat ${seatId}`,
                             description: "Standard Entry Ticket",
                         },
-                        unit_amount: 5000,
+                        unit_amount: 5000, // $50.00
                     },
                     quantity: 1,
                 },
@@ -56,11 +138,14 @@ export const createCheckoutSession = async (
 
         res.status(200).json({
             message: "Checkout session created",
+            mode: "live",
             url: session.url,
         });
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: "Failed to create checkout session" });
+        console.error("[Payment Error]:", error);
+        res.status(500).json({
+            error: "Internal server error while processing payment",
+        });
     }
 };
 
@@ -77,7 +162,6 @@ export const handleStripeWebhook = async (
         if (!webhookSecret) {
             throw new Error("STRIPE_WEBHOOK_SECRET is missing");
         }
-        // Verify that the event genuinely came from Stripe using the raw body
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err: any) {
         console.error(
@@ -87,11 +171,9 @@ export const handleStripeWebhook = async (
         return;
     }
 
-    // Handle successful payment event
     if (event.type === "checkout.session.completed") {
         const session = event.data.object as Stripe.Checkout.Session;
 
-        // Extract seat and user info from metadata
         const eventId = Number(session.metadata?.eventId);
         const seatId = Number(session.metadata?.seatId);
         const userId = session.metadata?.userId;
@@ -102,61 +184,21 @@ export const handleStripeWebhook = async (
             return;
         }
 
-        const holdKey = `hold:event:${eventId}:seat:${seatId}`;
-        const client = await pool.connect();
-
         try {
-            await client.query("BEGIN");
-
-            // Lock the seat row in PostgreSQL
-            const seatResult = await client.query(
-                `SELECT status FROM "Seats" WHERE id = $1 AND event_id = $2 FOR UPDATE`,
-                [seatId, eventId],
-            );
-
-            if (
-                seatResult.rows.length === 0 ||
-                seatResult.rows[0].status === "booked"
-            ) {
-                await client.query("ROLLBACK");
-                console.warn(
-                    `[Webhook] Seat ${seatId} is already booked or does not exist.`,
+            const result = await finalizeBookingInDB(eventId, seatId, userId);
+            if (result.success) {
+                console.log(
+                    `🎉 [Webhook] Payment confirmed! Seat ${seatId} booked for ${userId} (Ref: ${result.bookingReference})`,
                 );
-                res.status(200).json({ received: true });
-                return;
+            } else {
+                console.warn(`[Webhook] ${result.reason}`);
             }
-
-            // Update seat status to booked
-            await client.query(
-                `UPDATE "Seats" SET status = 'booked', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-                [seatId],
-            );
-
-            // Create official booking record
-            const bookingReference = uuidv4();
-            await client.query(
-                `INSERT INTO "Bookings" (event_id, seat_id, user_id, booking_reference, status)
-                VALUES ($1, $2, $3, $4, 'confirmed')`,
-                [eventId, seatId, userId, bookingReference],
-            );
-
-            // Remove temporary hold from Redis
-            await redisClient.del(holdKey);
-
-            await client.query("COMMIT");
-            console.log(
-                `[Webhook] Payment confirmed! Seat ${seatId} booked for ${userId} (Ref: ${bookingReference})`,
-            );
         } catch (dbError) {
-            await client.query("ROLLBACK");
             console.error("[Webhook] Database transaction failed:", dbError);
             res.status(500).json({ error: "Failed to finalize booking" });
             return;
-        } finally {
-            client.release();
         }
     }
 
-    // Acknowledge receipt of the event to Stripe
     res.status(200).json({ received: true });
 };
