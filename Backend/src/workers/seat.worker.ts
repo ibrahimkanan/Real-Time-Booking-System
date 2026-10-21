@@ -1,4 +1,7 @@
+// src/workers/seat.worker.ts
+
 import { pool } from "../config/db.js";
+import { emitSeatUpdate } from "../config/socket.js";
 
 export const startSeatBookingWorker = () => {
     console.log("[Worker] Seat relase backround worker started");
@@ -15,6 +18,7 @@ export const startSeatBookingWorker = () => {
                 RETURNING id, seat_number;
             `);
 
+
             if (result.rowCount && result.rowCount > 0) {
                 console.log(
                     `[Worker] Released ${result.rowCount} expired seats back to 'available'.`,
@@ -22,6 +26,11 @@ export const startSeatBookingWorker = () => {
                 result.rows.forEach((row) => {
                     console.log(
                         `         -> Released Seat ID: ${row.id} (${row.seat_number})`,
+                    );
+                    emitSeatUpdate(
+                        Number(row.event_id),
+                        Number(row.id),
+                        "available",
                     );
                 });
             }

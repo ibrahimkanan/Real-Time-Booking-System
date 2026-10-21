@@ -6,10 +6,13 @@ import seatRoutes from "./routes/seat.route.js";
 import { startSeatBookingWorker } from "./workers/seat.worker.js";
 import paymentRoutes from "./routes/payment.route.js";
 
+import { createServer } from "http";
+import { initSocket } from "./config/socket.js";
+
 const app = express();
 const PORT = 3000;
 
-// stripe webhook needs raw body
+// Stripe webhook needs raw body
 app.use((req, res, next) => {
     if (req.originalUrl === "/api/payments/webhook") {
         next();
@@ -25,7 +28,7 @@ async function main() {
     console.log("--- Initializing Real-Time Booking Backend ---");
 
     try {
-        // 1.Test PostgreSQL
+        // 1. Test PostgreSQL
         const pgRes = await pool.query(
             "SELECT NOW() as current_time, current_database() as database",
         );
@@ -37,15 +40,16 @@ async function main() {
         const redisVal = await redisClient.get("health");
         console.log("[Redis] Health check key value:", redisVal);
 
-        // 3. start background worker
-        startSeatBookingWorker();
+        // 3. Express & Socket.io Server
+        const httpServer = createServer(app);
+        initSocket(httpServer);
 
-        // 4. Express Server
-        app.listen(PORT, () => {
+        httpServer.listen(PORT, () => {
             console.log(
-                `[Server] Express is running on http://localhost:${PORT}`,
+                `🚀 Server & Socket.io running on http://localhost:${PORT}`,
             );
-            console.log("--- API is ready to accept requests ---");
+            // 4. Start background worker once server & socket are ready
+            startSeatBookingWorker();
         });
     } catch (error) {
         console.error("Initialization error:", error);

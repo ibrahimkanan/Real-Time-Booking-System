@@ -6,6 +6,7 @@ import { redisClient } from "../config/redis.js";
 import { pool } from "../config/db.js";
 import { v4 as uuidv4 } from "uuid";
 import Stripe from "stripe";
+import { emitSeatUpdate } from "../config/socket.js";
 
 // Helper function to finalize booking in PostgreSQL and clean up Redis
 const finalizeBookingInDB = async (
@@ -54,6 +55,7 @@ const finalizeBookingInDB = async (
         await redisClient.del(holdKey);
 
         await client.query("COMMIT");
+        emitSeatUpdate(Number(eventId), Number(seatId), "booked");
         return { success: true, bookingReference };
     } catch (error) {
         await client.query("ROLLBACK");

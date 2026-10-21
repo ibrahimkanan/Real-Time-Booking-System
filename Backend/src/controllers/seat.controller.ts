@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { pool } from "../config/db.js";
 import { redisClient } from "../config/redis.js";
 import { v4 as uuidv4 } from "uuid";
+import { emitSeatUpdate } from "../config/socket.js";
 
 export const holdSeat = async (req: Request, res: Response) => {
     const { eventId, seatId, userId } = req.body;
@@ -52,6 +53,7 @@ export const holdSeat = async (req: Request, res: Response) => {
             await redisClient.setEx(holdKey, 300, userId);
             await client.query("COMMIT");
 
+            emitSeatUpdate(Number(eventId), Number(seatId), "held");
             res.status(200).json({
                 message: "Seat held successfully",
                 seatId,
