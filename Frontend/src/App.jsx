@@ -7,7 +7,6 @@ const API_BASE = 'http://localhost:3000/api';
 const SOCKET_URL = 'http://localhost:3000';
 const EVENT_ID = 1;
 
-// توليد معرف مستخدم فريد لكل تبويب متصفح لتجربة التزاحم بسهولة
 const generateUserId = () => `user-${Math.floor(1000 + Math.random() * 9000)}`;
 
 export default function App() {
@@ -24,7 +23,6 @@ export default function App() {
     setLogs((prev) => [{ id: Date.now() + Math.random(), text, time }, ...prev.slice(0, 19)]);
   };
 
-  // 1. جلب المقاعد من السيرفر (أو إنشاء 30 مقعداً افتراضياً للعرض إذا لم يجهز مسار GET بعد)
   const fetchSeats = async () => {
     try {
       const res = await fetch(`${API_BASE}/seats/${EVENT_ID}`);
@@ -41,7 +39,6 @@ export default function App() {
     }
   };
 
-  // 2. إعداد اتصال Socket.io والاستماع للتحديثات اللحظية
   useEffect(() => {
     fetchSeats();
 
@@ -68,7 +65,6 @@ export default function App() {
         )
       );
 
-      // إذا انتهت مهلة المقعد أو تم حجزه، نحدّث حالة الاختيار الحالي
       setMyHeldSeat((current) => {
         if (current && Number(current.id) === Number(seatId) && status === 'available') {
           return null;
@@ -82,7 +78,6 @@ export default function App() {
     };
   }, []);
 
-  // 3. تجميد المقعد عند الضغط عليه (Hold Seat)
   const handleSelectSeat = async (seat) => {
     if (seat.status !== 'available' || loading) return;
 
@@ -120,7 +115,6 @@ export default function App() {
     }
   };
 
-  // 4. إتمام الدفع (يدعم وضع Mock ووضع Stripe Live تلقائياً)
   const handleCheckout = async () => {
     if (!myHeldSeat || loading) return;
 
@@ -145,13 +139,11 @@ export default function App() {
         return;
       }
 
-      // في حال كان النظام في وضع Stripe Live
       if (data.url) {
         window.location.href = data.url;
         return;
       }
 
-      // في حال كان النظام في وضع Mock
       setFeedback({
         type: 'success',
         message: `🎉 Ticket Confirmed! Ref: ${data.bookingReference}`,
